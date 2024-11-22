@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Scraped Articles for <%= keyword %></title>
+</head>
+<body>
+  <h1>Scraped Articles for: <%= keyword %></h1>
+
+  <% if (articles.length > 0) { %>
+    <ul>
+      <% articles.forEach(function(article) { %>
+        <li>
+          <strong><a href="<%= article.url %>" target="_blank"><%= article.title %></a></strong><br>
+          <em><%= article.abstract || 'No abstract available.' %></em>
+        </li>
+      <% }); %>
+    </ul>
+  <% } else { %>
+    <p>No articles found for the keyword "<%= keyword %>".</p>
+  <% } %>
+
+  <br>
+  <a href="/">Back to Search</a>
+</body>
+</html>
