@@ -15,7 +15,7 @@ module.exports = async (req, res) => {
     let targetUrl = `https://scholar.google.com/scholar?hl=en&as_sdt=0%2C5&q=${encodedKeyword}&btnG=`;
 
     let urlsToVisit = [targetUrl];
-    const maxCrawlLength = 5; // Reduce to 5 for Vercel's serverless time limits
+    const maxCrawlLength = 20; // Reduce to 5 for Vercel's serverless time limits
     let crawledCount = 0;
     const articleData = [];
     const visitedUrls = new Set();
@@ -53,7 +53,7 @@ module.exports = async (req, res) => {
                 const $ = cheerio.load(response.data);
                 $('a').each((index, element) => {
                     let url = $(element).attr('href');
-                    if (url && url.startsWith("https://") && !visitedUrls.has(url)) {
+                    if (url && url.startsWith("https://") && !visitedUrls.has(url) && !url.includes("google") && !url.includes("download")) {
                         urlsToVisit.push(url);
                     }
                 });
