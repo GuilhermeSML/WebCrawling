@@ -15,80 +15,86 @@ module.exports = async (req, res) => {
     let targetUrl = `https://scholar.google.com/scholar?hl=en&as_sdt=0%2C5&q=${encodedKeyword}&btnG=`;
 
     let urlsToVisit = [targetUrl];
-    const maxCrawlLength = 20; // Reduce to 5 for Vercel's serverless time limits
+    const maxCrawlLength = 5; // Limit the number of crawled pages to reduce execution time
     let crawledCount = 0;
     const articleData = [];
     const visitedUrls = new Set();
 
-    let crawlFinished = false;
-    const timeout = setTimeout(() => {
-        if (!crawlFinished) {
-            console.log('Timeout reached, sending partial results...');
-            res.status(200).json({ articles: articleData, keyword: keyword });
-        }
-    }, 60000);  // Timeout reduced
-
     try {
-        for (; urlsToVisit.length > 0 && crawledCount < maxCrawlLength;) {
-            const currentUrl = urlsToVisit.shift();
+        // Process multiple URLs concurrently, but limit the number of concurrent requests
+        while (urlsToVisit.length > 0 && crawledCount < maxCrawlLength) {
+            // Limit concurrent requests (e.g., 5 at a time)
+            const currentBatch = urlsToVisit.splice(0, 5);
+            const fetchPromises = currentBatch.map(async (url) => {
+                if (visitedUrls.has(url)) return null;
+                visitedUrls.add(url);
+                crawledCount++;
 
-            if (visitedUrls.has(currentUrl)) continue;
-            visitedUrls.add(currentUrl);
+                try {
+                    const response = await axios.get(url, {
+                        timeout: 10000, // Short timeout for individual requests
+                        headers: {
+                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                        }
+                    });
 
-            crawledCount++;
-
-            try {
-                const response = await axios.get(currentUrl, {
-                    timeout: 10000,
-                    headers: {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                    if (!response.data) {
+                        console.error(`No data received for ${url}`);
+                        return null;
                     }
-                });
 
-                if (!response.data) {
-                    console.error('No data received');
-                    continue;
-                }
+                    const $ = cheerio.load(response.data);
+                    const newUrls = [];
+                    $('a').each((index, element) => {
+                        const url = $(element).attr('href');
+                        if (url && url.startsWith("https://") && !visitedUrls.has(url) && !url.includes("google") && !url.includes("download")) {
+                            newUrls.push(url);
+                        }
+                    });
 
-                const $ = cheerio.load(response.data);
-                $('a').each((index, element) => {
-                    let url = $(element).attr('href');
-                    if (url && url.startsWith("https://") && !visitedUrls.has(url) && !url.includes("google") && !url.includes("download")) {
-                        urlsToVisit.push(url);
-                    }
-                });
+                    // Add new URLs to the list of URLs to visit
+                    urlsToVisit.push(...newUrls);
 
-                // Extract article data after the first URL (to avoid scraping the search result page itself)
-                if (crawledCount > 1) {
-                    const data = {};
+                    // Extract article data (use the old method for extracting abstracts)
+                    const data = {
+                        url,
+                        title: $('title').text().trim(),
+                        abstract: ''
+                    };
 
-                    data.url = currentUrl;
-                    data.title = $('title').text().trim();
+                    // Old abstract extraction logic
+                    const abstractElement = $('*:contains("Abstract")')
+                        .filter((_, el) => $(el).text().trim() === "Abstract")
+                        .nextUntil(':header')  // Adjust selector if sibling structure differs
+                        .text()
+                        .trim();
 
-                    if (currentUrl.includes('hal.science')) {
-                        const abstractText = $('div.abstract').text().trim(); // Adjust selector based on actual structure
-                        data.abstract = abstractText || "Abstract not found";
+                    // Fallback if abstract is not found
+                    if (abstractElement) {
+                        data.abstract = abstractElement;
                     } else {
-                        // Abstract extraction logic
-                        data.abstract = $('*:contains("Abstract")').filter((_, el) => $(el).text().trim() === "Abstract")
-                            .nextUntil(':header')  // Adjust selector if sibling structure differs
-                            .text()
-                            .trim();
+                        data.abstract = $('meta[name="description"]').attr('content') || "Abstract not found";
                     }
 
                     // Push the scraped data to the array
-                    articleData.push(data);
-                }
+                    return data;
 
-            } catch (fetchError) {
-                // Log and continue for each individual URL that fails to load
-                console.error(`Error fetching ${currentUrl}: ${fetchError.message}`);
-            }
+                } catch (fetchError) {
+                    console.error(`Error fetching ${url}: ${fetchError.message}`);
+                    return null;
+                }
+            });
+
+            // Wait for the batch of requests to complete
+            const results = await Promise.all(fetchPromises);
+            articleData.push(...results.filter(Boolean));  // Filter out null responses
+
+            // Optionally, delay between batches to avoid overwhelming external sites
+            await new Promise(resolve => setTimeout(resolve, 1000));  // 1-second delay between batches
         }
 
-        crawlFinished = true;
-        clearTimeout(timeout);
         res.status(200).json({ articles: articleData, keyword: keyword });
+
     } catch (error) {
         console.error('Error during crawling:', error.message);
         res.status(500).json({ error: 'Error occurred while scraping. Please try again later.' });
