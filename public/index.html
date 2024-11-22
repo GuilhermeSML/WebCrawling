@@ -1,20 +1,60 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Article Scraper</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Scraper</title>
 </head>
 <body>
-  <h1>Google Scholar Article Scraper</h1>
-  
-  <form action="/scrape" method="POST">
-    <label for="keyword">Enter Keyword to Search:</label>
-    <input type="text" id="keyword" name="keyword" required>
-    <button type="submit">Scrape</button>
-  </form>
+    <h1>Web Scraper</h1>
+    <form id="scrape-form">
+        <label for="keyword">Enter a keyword:</label>
+        <input type="text" id="keyword" name="keyword" required>
+        <button type="submit">Scrape</button>
+    </form>
+    <div id="results"></div>
+    <script>
+        document.getElementById('scrape-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const keyword = document.getElementById('keyword').value;
 
-  <br>
-  <p><strong>Note:</strong> Results may take a while depending on the search.</p>
+            // Send POST request to the API
+            try {
+                const response = await fetch('/api', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ keyword }),
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to fetch results.');
+                }
+
+                const data = await response.json();
+                displayResults(data.articles, data.keyword);
+            } catch (error) {
+                document.getElementById('results').innerHTML = `<p>Error: ${error.message}</p>`;
+            }
+        });
+
+        function displayResults(articles, keyword) {
+            const resultsDiv = document.getElementById('results');
+            if (articles.length === 0) {
+                resultsDiv.innerHTML = `<p>No articles found for keyword: "${keyword}".</p>`;
+                return;
+            }
+            const resultsHTML = articles.map(article => `
+                <div>
+                    <h3>${article.title}</h3>
+                    <p><strong>URL:</strong> <a href="${article.url}" target="_blank">${article.url}</a></p>
+                    <p><strong>Abstract:</strong> ${article.abstract}</p>
+                </div>
+                <hr>
+            `).join('');
+            resultsDiv.innerHTML = `<h2>Results for "${keyword}"</h2>${resultsHTML}`;
+        }
+    </script>
 </body>
 </html>
