@@ -31,6 +31,12 @@ module.exports = async (req, res) => {
         while (urlsToVisit.length > 0 && crawledCount < maxCrawlLength) {
             const currentUrl = urlsToVisit.shift();
 
+            // Skip the first URL (Google Scholar search results)
+            if (crawledCount === 0) {
+                crawledCount++;  // Increment count but don't process this page
+                continue;
+            }
+
             if (visitedUrls.has(currentUrl)) continue;
             visitedUrls.add(currentUrl);
             crawledCount++;
