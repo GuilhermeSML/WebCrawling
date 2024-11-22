@@ -6,7 +6,8 @@ module.exports = async (req, res) => {
         return res.status(405).json({ error: `Method ${req.method} not allowed.` });
     }
 
-    const keyword = req.body.keyword;
+    // Ensure that the body is parsed correctly and keyword exists
+    const { keyword } = req.body;
     if (!keyword) {
         return res.status(400).json({ error: 'Please enter a keyword to search.' });
     }
@@ -15,20 +16,20 @@ module.exports = async (req, res) => {
     let targetUrl = `https://scholar.google.com/scholar?hl=en&as_sdt=0%2C5&q=${encodedKeyword}&btnG=`;
 
     let urlsToVisit = [targetUrl];
-    const maxCrawlLength = 3; // Limit the number of crawled pages for quicker results
+    const maxCrawlLength = 3; // Limit to 3 pages for faster responses
     let crawledCount = 0;
     const articleData = [];
     const visitedUrls = new Set();
 
-    // Initialize streaming response
+    // Initialize streaming response with a JSON array
     res.setHeader('Content-Type', 'application/json');
-    res.write('{"articles":['); // Start the JSON array
+    res.write('{"articles":['); // Start JSON array
 
     try {
         // Function to send partial response
         const sendPartialResponse = () => {
             if (articleData.length > 0) {
-                // Write a valid JSON array element
+                // Write the last article data, followed by a comma
                 res.write(JSON.stringify(articleData[articleData.length - 1]) + ',');
             }
         };
@@ -73,31 +74,32 @@ module.exports = async (req, res) => {
                 // Add new URLs to the list of URLs to visit
                 urlsToVisit.push(...newUrls);
 
-                // Extract article data (use the old method for extracting abstracts)
-                const data = {
-                    url: currentUrl,
-                    title: $('title').text().trim(),
-                    abstract: ''
-                };
+                if (crawledCount > 1) {
+                    // Extract article data (use the old method for extracting abstracts)
+                    const data = {
+                        url: currentUrl,
+                        title: $('title').text().trim(),
+                        abstract: ''
+                    };
 
-                // Old abstract extraction logic
-                const abstractElement = $('*:contains("Abstract")')
-                    .filter((_, el) => $(el).text().trim() === "Abstract")
-                    .nextUntil(':header')  // Adjust selector if sibling structure differs
-                    .text()
-                    .trim();
+                    // Old abstract extraction logic
+                    const abstractElement = $('*:contains("Abstract")')
+                        .filter((_, el) => $(el).text().trim() === "Abstract")
+                        .nextUntil(':header')  // Adjust selector if sibling structure differs
+                        .text()
+                        .trim();
 
-                // Fallback if abstract is not found
-                if (abstractElement) {
-                    data.abstract = abstractElement;
-                } else {
-                    data.abstract = $('meta[name="description"]').attr('content') || "Abstract not found";
+                    // Fallback if abstract is not found
+                    if (abstractElement) {
+                        data.abstract = abstractElement;
+                    } else {
+                        data.abstract = $('meta[name="description"]').attr('content') || "Abstract not found";
+                    }
                 }
-
                 // Push the scraped data to the array
                 articleData.push(data);
 
-                // Send partial response after each page is processed (or after a batch of pages)
+                // Send partial response after each article is processed
                 sendPartialResponse();
 
                 // Optionally, delay between pages to avoid overwhelming external servers
@@ -108,14 +110,14 @@ module.exports = async (req, res) => {
             }
         }
 
-        // Finish the response once all pages are crawled
+        // After crawling, send the last article and close the JSON array
         if (articleData.length > 0) {
-            // Remove the trailing comma after the last article
+            // Remove trailing comma for the last element
             res.write(JSON.stringify(articleData[articleData.length - 1]));
         }
 
-        res.write(']}');  // End the JSON array
-        res.end();  // Close the response stream
+        res.write(']}');  // End JSON array
+        res.end();  // Close the response
 
     } catch (error) {
         console.error('Error during crawling:', error.message);
