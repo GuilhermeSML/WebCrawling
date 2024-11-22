@@ -15,7 +15,7 @@ module.exports = async (req, res) => {
     let targetUrl = `https://scholar.google.com/scholar?hl=en&as_sdt=0%2C5&q=${encodedKeyword}&btnG=`;
 
     let urlsToVisit = [targetUrl];
-    const maxCrawlLength = 5; // Limit the number of crawled pages to reduce execution time
+    const maxCrawlLength = 10; // Limit the number of crawled pages to reduce execution time
     let crawledCount = 0;
     const articleData = [];
     const visitedUrls = new Set();
