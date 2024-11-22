@@ -101,13 +101,15 @@ module.exports = async (req, res) => {
                 }
             } catch (fetchError) {
                 console.error(`Error fetching ${currentUrl}: ${fetchError.message}`);
+                // Log error but continue with the next URL
             }
         }
 
+        // Set crawlFinished to true and clear timeout once the crawl is complete
         crawlFinished = true;
         clearTimeout(timeout);
 
-        // Send the results as JSON
+        // Send the results even if some URLs failed
         res.status(200).json({ keyword, articles: articleData });
     } catch (error) {
         console.error('Error during scraping:', error.message);
