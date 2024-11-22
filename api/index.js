@@ -20,11 +20,17 @@ module.exports = async (req, res) => {
     const articleData = [];
     const visitedUrls = new Set();
 
+    // Initialize streaming response
+    res.setHeader('Content-Type', 'application/json');
+    res.write('{"articles":['); // Start the JSON array
+
     try {
         // Function to send partial response
         const sendPartialResponse = () => {
-            // Send any progress so far after each batch of pages
-            res.write(JSON.stringify({ articles: articleData, keyword: keyword }));
+            if (articleData.length > 0) {
+                // Write a valid JSON array element
+                res.write(JSON.stringify(articleData[articleData.length - 1]) + ',');
+            }
         };
 
         // Loop through the URLs to scrape
@@ -54,8 +60,13 @@ module.exports = async (req, res) => {
                 // Collect new links from the current page
                 $('a').each((index, element) => {
                     const url = $(element).attr('href');
-                    if (url && url.startsWith("https://") && !visitedUrls.has(url) && !url.includes("google") && !url.includes("download")) {
-                        newUrls.push(url);
+
+                    // Filter out links that are from Google Scholar or are not valid URLs
+                    if (url && url.startsWith("https://") && !visitedUrls.has(url)
+                        && !url.includes("scholar.google.com") // Exclude Google Scholar links
+                        && !url.includes("google")             // Additional filter for any google-related links
+                        && !url.includes("download")) {        // Filter out download links
+                        newUrls.push(url);  // Add valid URLs to the newUrls array
                     }
                 });
 
@@ -98,7 +109,13 @@ module.exports = async (req, res) => {
         }
 
         // Finish the response once all pages are crawled
-        res.end();  // End the stream after sending all partial responses
+        if (articleData.length > 0) {
+            // Remove the trailing comma after the last article
+            res.write(JSON.stringify(articleData[articleData.length - 1]));
+        }
+
+        res.write(']}');  // End the JSON array
+        res.end();  // Close the response stream
 
     } catch (error) {
         console.error('Error during crawling:', error.message);
