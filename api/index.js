@@ -32,7 +32,7 @@ module.exports = async (req, res) => {
         if (!crawlFinished) {
             // If the crawl is not finished in 30 seconds, render the current results
             console.log('Timeout reached, sending partial results...');
-            res.render('results', { articles: articleData, keyword: keyword });
+            res.status(200).json({ articles: articleData, keyword: keyword });
         }
     }, 30000); // 30 seconds timeout
 
@@ -108,7 +108,7 @@ module.exports = async (req, res) => {
         clearTimeout(timeout);
 
         // After the crawl, render the results page with scraped data
-        res.render('results', { articles: articleData, keyword: keyword });
+        res.status(200).json({ articles: articleData, keyword: keyword });
 
     } catch (error) {
         console.error('Error during crawling:', error.message);
