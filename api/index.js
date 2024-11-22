@@ -16,14 +16,14 @@ module.exports = async (req, res) => {
 
     const articleData = [];
     let crawledCount = 0;
-    const maxCrawlLength = 20;
+    const maxCrawlLength = 5;  // Reduced to 5 to prevent overloading the request
     const visitedUrls = new Set();
     let urlsToVisit = [targetUrl];
 
     // Variable to track if the crawl has finished
     let crawlFinished = false;
 
-    // Timeout to prevent infinite spinning
+    // Timeout to prevent infinite spinning (30 seconds)
     const timeout = setTimeout(() => {
         if (!crawlFinished) {
             console.log('Timeout reached, sending partial results...');
