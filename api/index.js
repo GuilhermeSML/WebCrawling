@@ -6,47 +6,30 @@ module.exports = async (req, res) => {
         return res.status(405).json({ error: `Method ${req.method} not allowed.` });
     }
 
-    console.log('Received keyword:', req.body);
-
-    // Ensure that the body is parsed correctly and keyword exists
-    const { keyword } = req.body;
+    const keyword = req.body.keyword;
     if (!keyword) {
         return res.status(400).json({ error: 'Please enter a keyword to search.' });
     }
-
-    console.log('Received keyword:', keyword);  // Debugging to confirm if the keyword is received
 
     const encodedKeyword = encodeURIComponent(keyword);
     let targetUrl = `https://scholar.google.com/scholar?hl=en&as_sdt=0%2C5&q=${encodedKeyword}&btnG=`;
 
     let urlsToVisit = [targetUrl];
-    const maxCrawlLength = 3; // Limit to 3 pages for faster responses
+    const maxCrawlLength = 10; // Limit the number of crawled pages for quicker results
     let crawledCount = 0;
     const articleData = [];
     const visitedUrls = new Set();
 
-    // Initialize streaming response with a JSON array
-    res.setHeader('Content-Type', 'application/json');
-    res.write('{"articles":['); // Start JSON array
-
     try {
         // Function to send partial response
         const sendPartialResponse = () => {
-            if (articleData.length > 0) {
-                // Write the last article data, followed by a comma
-                res.write(JSON.stringify(articleData[articleData.length - 1]) + ',');
-            }
+            // Send any progress so far after each batch of pages
+            res.write(JSON.stringify({ articles: articleData, keyword: keyword }));
         };
 
         // Loop through the URLs to scrape
         while (urlsToVisit.length > 0 && crawledCount < maxCrawlLength) {
             const currentUrl = urlsToVisit.shift();
-
-            // Skip the first URL (Google Scholar search results)
-            if (crawledCount === 0) {
-                crawledCount++;  // Increment count but don't process this page
-                continue;
-            }
 
             if (visitedUrls.has(currentUrl)) continue;
             visitedUrls.add(currentUrl);
@@ -71,19 +54,15 @@ module.exports = async (req, res) => {
                 // Collect new links from the current page
                 $('a').each((index, element) => {
                     const url = $(element).attr('href');
-
-                    // Filter out links that are from Google Scholar or are not valid URLs
-                    if (url && url.startsWith("https://") && !visitedUrls.has(url)
-                        && !url.includes("scholar.google.com") // Exclude Google Scholar links
-                        && !url.includes("google")             // Additional filter for any google-related links
-                        && !url.includes("download")) {        // Filter out download links
-                        newUrls.push(url);  // Add valid URLs to the newUrls array
+                    if (url && url.startsWith("https://") && !visitedUrls.has(url) && !url.includes("google") && !url.includes("download")) {
+                        newUrls.push(url);
                     }
                 });
 
                 // Add new URLs to the list of URLs to visit
                 urlsToVisit.push(...newUrls);
 
+                // Extract article data (use the old method for extracting abstracts)
                 const data = {
                     url: currentUrl,
                     title: $('title').text().trim(),
@@ -107,7 +86,7 @@ module.exports = async (req, res) => {
                 // Push the scraped data to the array
                 articleData.push(data);
 
-                // Send partial response after each article is processed
+                // Send partial response after each page is processed (or after a batch of pages)
                 sendPartialResponse();
 
                 // Optionally, delay between pages to avoid overwhelming external servers
@@ -118,14 +97,8 @@ module.exports = async (req, res) => {
             }
         }
 
-        // After crawling, send the last article and close the JSON array
-        if (articleData.length > 0) {
-            // Remove trailing comma for the last element
-            res.write(JSON.stringify(articleData[articleData.length - 1]));
-        }
-
-        res.write(']}');  // End JSON array
-        res.end();  // Close the response
+        // Finish the response once all pages are crawled
+        res.end();  // End the stream after sending all partial responses
 
     } catch (error) {
         console.error('Error during crawling:', error.message);
