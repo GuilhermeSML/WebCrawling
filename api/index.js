@@ -6,6 +6,8 @@ module.exports = async (req, res) => {
         return res.status(405).json({ error: `Method ${req.method} not allowed.` });
     }
 
+    console.log('Received keyword:', req.body);
+
     // Ensure that the body is parsed correctly and keyword exists
     const { keyword } = req.body;
     if (!keyword) {
