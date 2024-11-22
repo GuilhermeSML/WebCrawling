@@ -26,7 +26,7 @@ module.exports = async (req, res) => {
             console.log('Timeout reached, sending partial results...');
             res.status(200).json({ articles: articleData, keyword: keyword });
         }
-    }, 15000);  // Timeout reduced
+    }, 60000);  // Timeout reduced
 
     try {
         for (; urlsToVisit.length > 0 && crawledCount < maxCrawlLength;) {
