@@ -57,8 +57,14 @@ module.exports = async (req, res) => {
                     }
                 });
 
-                // Extract data for articles from the first page
-                if (crawledCount === 1) {
+                if (currentUrl.includes('hal.science')) {
+                    const abstractText = $('div.abstract').text().trim();
+                    articleData.push({
+                        title: $('title').text().trim() || "Title not found",
+                        url: currentUrl,
+                        abstract: abstractText || "Abstract not found"
+                    });
+                } else if (crawledCount === 1) { // Extract data for articles from the first page
                     // Specific Google Scholar scraping logic
                     $('.gs_r.gs_or').each((_, element) => {
                         const title = $(element).find('.gs_rt a').text().trim();
