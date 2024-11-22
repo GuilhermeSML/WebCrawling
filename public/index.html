@@ -4,21 +4,29 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Web Scraper</title>
+    <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
-    <h1>Web Scraper</h1>
-    <form id="scrape-form">
-        <label for="keyword">Enter a keyword:</label>
-        <input type="text" id="keyword" name="keyword" required>
-        <button type="submit">Scrape</button>
-    </form>
-    <div id="results"></div>
+    <div class="container">
+        <h1>Web Scraper</h1>
+        <form id="scrape-form">
+            <label for="keyword">Enter a keyword:</label>
+            <input type="text" id="keyword" name="keyword" required>
+            <button type="submit">Scrape</button>
+        </form>
+        <div id="loading" style="display: none;">Loading... Please wait.</div>
+        <div id="results"></div>
+    </div>
     <script>
         document.getElementById('scrape-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             const keyword = document.getElementById('keyword').value;
+            const loadingIndicator = document.getElementById('loading');
+            const resultsDiv = document.getElementById('results');
 
-            // Send POST request to the API
+            resultsDiv.innerHTML = ''; // Clear previous results
+            loadingIndicator.style.display = 'block';
+
             try {
                 const response = await fetch('/api', {
                     method: 'POST',
@@ -28,6 +36,8 @@
                     body: JSON.stringify({ keyword }),
                 });
 
+                loadingIndicator.style.display = 'none';
+
                 if (!response.ok) {
                     throw new Error('Failed to fetch results.');
                 }
@@ -35,7 +45,8 @@
                 const data = await response.json();
                 displayResults(data.articles, data.keyword);
             } catch (error) {
-                document.getElementById('results').innerHTML = `<p>Error: ${error.message}</p>`;
+                loadingIndicator.style.display = 'none';
+                resultsDiv.innerHTML = `<p class="error">Error: ${error.message}</p>`;
             }
         });
 
@@ -46,12 +57,11 @@
                 return;
             }
             const resultsHTML = articles.map(article => `
-                <div>
+                <div class="article">
                     <h3>${article.title}</h3>
                     <p><strong>URL:</strong> <a href="${article.url}" target="_blank">${article.url}</a></p>
                     <p><strong>Abstract:</strong> ${article.abstract}</p>
                 </div>
-                <hr>
             `).join('');
             resultsDiv.innerHTML = `<h2>Results for "${keyword}"</h2>${resultsHTML}`;
         }
