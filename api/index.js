@@ -12,6 +12,8 @@ module.exports = async (req, res) => {
         return res.status(400).json({ error: 'Please enter a keyword to search.' });
     }
 
+    console.log('Received keyword:', keyword);  // Debugging to confirm if the keyword is received
+
     const encodedKeyword = encodeURIComponent(keyword);
     let targetUrl = `https://scholar.google.com/scholar?hl=en&as_sdt=0%2C5&q=${encodedKeyword}&btnG=`;
 
@@ -37,6 +39,12 @@ module.exports = async (req, res) => {
         // Loop through the URLs to scrape
         while (urlsToVisit.length > 0 && crawledCount < maxCrawlLength) {
             const currentUrl = urlsToVisit.shift();
+
+            // Skip the first URL (Google Scholar search results)
+            if (crawledCount === 0) {
+                crawledCount++;  // Increment count but don't process this page
+                continue;
+            }
 
             if (visitedUrls.has(currentUrl)) continue;
             visitedUrls.add(currentUrl);
@@ -74,28 +82,26 @@ module.exports = async (req, res) => {
                 // Add new URLs to the list of URLs to visit
                 urlsToVisit.push(...newUrls);
 
-                if (crawledCount > 1) {
-                    // Extract article data (use the old method for extracting abstracts)
-                    const data = {
-                        url: currentUrl,
-                        title: $('title').text().trim(),
-                        abstract: ''
-                    };
+                const data = {
+                    url: currentUrl,
+                    title: $('title').text().trim(),
+                    abstract: ''
+                };
 
-                    // Old abstract extraction logic
-                    const abstractElement = $('*:contains("Abstract")')
-                        .filter((_, el) => $(el).text().trim() === "Abstract")
-                        .nextUntil(':header')  // Adjust selector if sibling structure differs
-                        .text()
-                        .trim();
+                // Old abstract extraction logic
+                const abstractElement = $('*:contains("Abstract")')
+                    .filter((_, el) => $(el).text().trim() === "Abstract")
+                    .nextUntil(':header')  // Adjust selector if sibling structure differs
+                    .text()
+                    .trim();
 
-                    // Fallback if abstract is not found
-                    if (abstractElement) {
-                        data.abstract = abstractElement;
-                    } else {
-                        data.abstract = $('meta[name="description"]').attr('content') || "Abstract not found";
-                    }
+                // Fallback if abstract is not found
+                if (abstractElement) {
+                    data.abstract = abstractElement;
+                } else {
+                    data.abstract = $('meta[name="description"]').attr('content') || "Abstract not found";
                 }
+
                 // Push the scraped data to the array
                 articleData.push(data);
 
