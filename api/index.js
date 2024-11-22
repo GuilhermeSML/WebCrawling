@@ -15,18 +15,19 @@ module.exports = async (req, res) => {
     let targetUrl = `https://scholar.google.com/scholar?hl=en&as_sdt=0%2C5&q=${encodedKeyword}&btnG=`;
 
     let urlsToVisit = [targetUrl];
-    const maxCrawlLength = 3; // Reduce the number of crawled pages to 3 for quicker results
+    const maxCrawlLength = 3; // Limit the number of crawled pages for quicker results
     let crawledCount = 0;
     const articleData = [];
     const visitedUrls = new Set();
 
-    const timeoutDuration = 30000; // Timeout after 30 seconds to avoid serverless limits
-    const timeout = setTimeout(() => {
-        console.log('Timeout reached, sending partial results...');
-        res.status(200).json({ articles: articleData, keyword: keyword });
-    }, timeoutDuration);  // Timeout reduced to 30 seconds
-
     try {
+        // Function to send partial response
+        const sendPartialResponse = () => {
+            // Send any progress so far after each batch of pages
+            res.write(JSON.stringify({ articles: articleData, keyword: keyword }));
+        };
+
+        // Loop through the URLs to scrape
         while (urlsToVisit.length > 0 && crawledCount < maxCrawlLength) {
             const currentUrl = urlsToVisit.shift();
 
@@ -85,14 +86,19 @@ module.exports = async (req, res) => {
                 // Push the scraped data to the array
                 articleData.push(data);
 
+                // Send partial response after each page is processed (or after a batch of pages)
+                sendPartialResponse();
+
+                // Optionally, delay between pages to avoid overwhelming external servers
+                await new Promise(resolve => setTimeout(resolve, 1000));  // 1-second delay
+
             } catch (fetchError) {
                 console.error(`Error fetching ${currentUrl}: ${fetchError.message}`);
             }
         }
 
-        // Clear timeout and send the result
-        clearTimeout(timeout);
-        res.status(200).json({ articles: articleData, keyword: keyword });
+        // Finish the response once all pages are crawled
+        res.end();  // End the stream after sending all partial responses
 
     } catch (error) {
         console.error('Error during crawling:', error.message);
