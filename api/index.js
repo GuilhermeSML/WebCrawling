@@ -6,119 +6,113 @@ module.exports = async (req, res) => {
         return res.status(405).json({ error: `Method ${req.method} not allowed.` });
     }
 
-    const { keyword } = req.body;
+    const keyword = req.body.keyword;
     if (!keyword) {
-        return res.status(400).json({ error: 'Keyword is required.' });
+        return res.send('Please enter a keyword to search.');
     }
 
+    // URL encode the keyword to ensure proper query formation
     const encodedKeyword = encodeURIComponent(keyword);
-    const targetUrl = `https://scholar.google.com/scholar?hl=en&as_sdt=0%2C5&q=${encodedKeyword}&btnG=`;
 
-    const articleData = [];
-    let crawledCount = 0;
-    const maxCrawlLength = 5;  // Reduced to 5 to prevent overloading the request
-    const visitedUrls = new Set();
+    // Google Scholar search URL based on user input
+    let targetUrl = `https://scholar.google.com/scholar?hl=en&as_sdt=0%2C5&q=${encodedKeyword}&btnG=`;
+
+    // Initialize variables for crawling
     let urlsToVisit = [targetUrl];
+    const maxCrawlLength = 20;  // Set the limit for the number of URLs to crawl
+    let crawledCount = 0;
+    const articleData = [];
+    const visitedUrls = new Set(); // Set to track visited URLs
 
     // Variable to track if the crawl has finished
     let crawlFinished = false;
 
-    // Timeout to prevent infinite spinning (30 seconds)
+    // Timeout after 30 seconds
     const timeout = setTimeout(() => {
         if (!crawlFinished) {
+            // If the crawl is not finished in 30 seconds, render the current results
             console.log('Timeout reached, sending partial results...');
-            res.status(200).json({ keyword, articles: articleData });
+            res.render('results', { articles: articleData, keyword: keyword });
         }
     }, 30000); // 30 seconds timeout
 
     try {
+        // Crawl until the specified max crawl length is reached
         for (; urlsToVisit.length > 0 && crawledCount < maxCrawlLength;) {
             const currentUrl = urlsToVisit.shift();
 
             // Skip already visited URLs
-            if (visitedUrls.has(currentUrl)) continue;
+            if (visitedUrls.has(currentUrl)) {
+                continue;  // Skip the iteration and move on to the next URL in the queue
+            }
+
+            // Mark the current URL as visited
             visitedUrls.add(currentUrl);
 
             crawledCount++;
 
             try {
-                const response = await axios.get(currentUrl, { timeout: 10000 }); // 10-second timeout for each fetch
+                // Request the target website with a timeout of 10 seconds
+                const response = await axios.get(currentUrl, { timeout: 10000 }); // 10 seconds timeout
+                console.log(`Response received from ${currentUrl}`);
+
+                // Check if the response data contains anything useful
+                if (!response.data) {
+                    console.error('No data received');
+                }
+
                 const $ = cheerio.load(response.data);
 
-                // Log the fetched HTML for debugging purposes
-                console.log(`Fetched HTML from: ${currentUrl}`);
-                console.log(response.data); // <-- Log the full HTML to see the structure
+                // Find all links on the page
+                const linkElements = $('a');
+                linkElements.each((index, element) => {
+                    let url = $(element).attr('href');
 
-                // Extract links for future visits
-                $('a').each((_, el) => {
-                    const url = $(el).attr('href');
-                    if (url && url.startsWith('https://') && !visitedUrls.has(url)) {
+                    // Follow valid links that do not lead to Google or download pages
+                    if (url && url.startsWith("https://") && !visitedUrls.has(url) && !url.includes("google") && !url.includes("download")) {
+                        // Add the valid URLs to the list of URLs to visit
                         urlsToVisit.push(url);
                     }
                 });
 
-                if (currentUrl.includes('hal.science')) {
-                    const abstractText = $('div.abstract').text().trim();
-                    articleData.push({
-                        title: $('title').text().trim() || "Title not found",
-                        url: currentUrl,
-                        abstract: abstractText || "Abstract not found"
-                    });
-                } else if (crawledCount === 1) { // Extract data for articles from the first page
-                    // Specific Google Scholar scraping logic
-                    $('.gs_r.gs_or').each((_, element) => {
-                        const title = $(element).find('.gs_rt a').text().trim();
-                        const link = $(element).find('.gs_rt a').attr('href');
-                        const abstract = $(element).find('.gs_rs').text().trim();
+                // Extract article data after the first URL (to avoid scraping the search result page itself)
+                if (crawledCount > 1) {
+                    const data = {};
 
-                        if (title && link) {
-                            articleData.push({ title, url: link, abstract });
-                        }
-                    });
-                } else {
-                    // General scraping logic for title and abstract
-                    const title = $('title').text().trim();
-                    let abstract = '';
+                    data.url = currentUrl;
+                    data.title = $('title').text().trim();
 
-                    // Check for an abstract
-                    const abstractElement = $('*:contains("Abstract")')
-                        .filter((_, el) => $(el).text().trim() === "Abstract")
-                        .nextUntil(':header')
-                        .text()
-                        .trim();
-
-                    // Fallback if abstract is not found
-                    if (abstractElement) {
-                        abstract = abstractElement;
+                    if (currentUrl.includes('hal.science')) {
+                        const abstractText = $('div.abstract').text().trim(); // Adjust selector based on actual structure
+                        data.abstract = abstractText || "Abstract not found";
                     } else {
-                        abstract = $('meta[name="description"]').attr('content') || "Abstract not found";
+                        // Abstract extraction logic
+                        data.abstract = $('*:contains("Abstract")').filter((_, el) => $(el).text().trim() === "Abstract")
+                            .nextUntil(':header')  // Adjust selector if sibling structure differs
+                            .text()
+                            .trim();
                     }
 
-                    // If no abstract or title found, log the issue
-                    if (!title || !abstract) {
-                        console.log(`No title or abstract found for: ${currentUrl}`);
-                    }
-
-                    articleData.push({
-                        title: title || "Title not found",
-                        url: currentUrl,
-                        abstract: abstract || "Abstract not found",
-                    });
+                    // Push the scraped data to the array
+                    articleData.push(data);
                 }
+
             } catch (fetchError) {
+                // Log and continue for each individual URL that fails to load
                 console.error(`Error fetching ${currentUrl}: ${fetchError.message}`);
-                // Log error but continue with the next URL
             }
         }
 
-        // Set crawlFinished to true and clear timeout once the crawl is complete
+        // Set crawlFinished to true and clear the timeout once the crawl is complete
         crawlFinished = true;
         clearTimeout(timeout);
 
-        // Send the results even if some URLs failed
-        res.status(200).json({ keyword, articles: articleData });
+        // After the crawl, render the results page with scraped data
+        res.render('results', { articles: articleData, keyword: keyword });
+
     } catch (error) {
-        console.error('Error during scraping:', error.message);
-        res.status(500).json({ error: 'An error occurred during scraping.' });
+        console.error('Error during crawling:', error.message);
+        res.send('Error occurred while scraping. Please try again later.');
     }
+
 };
