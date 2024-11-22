@@ -45,6 +45,10 @@ module.exports = async (req, res) => {
                 const response = await axios.get(currentUrl, { timeout: 10000 }); // 10-second timeout for each fetch
                 const $ = cheerio.load(response.data);
 
+                // Log the fetched HTML for debugging purposes
+                console.log(`Fetched HTML from: ${currentUrl}`);
+                console.log(response.data); // <-- Log the full HTML to see the structure
+
                 // Extract links for future visits
                 $('a').each((_, el) => {
                     const url = $(el).attr('href');
@@ -53,7 +57,7 @@ module.exports = async (req, res) => {
                     }
                 });
 
-                // Extract data for articles
+                // Extract data for articles from the first page
                 if (crawledCount === 1) {
                     // Specific Google Scholar scraping logic
                     $('.gs_r.gs_or').each((_, element) => {
@@ -70,16 +74,23 @@ module.exports = async (req, res) => {
                     const title = $('title').text().trim();
                     let abstract = '';
 
+                    // Check for an abstract
                     const abstractElement = $('*:contains("Abstract")')
                         .filter((_, el) => $(el).text().trim() === "Abstract")
                         .nextUntil(':header')
                         .text()
                         .trim();
 
+                    // Fallback if abstract is not found
                     if (abstractElement) {
                         abstract = abstractElement;
                     } else {
                         abstract = $('meta[name="description"]').attr('content') || "Abstract not found";
+                    }
+
+                    // If no abstract or title found, log the issue
+                    if (!title || !abstract) {
+                        console.log(`No title or abstract found for: ${currentUrl}`);
                     }
 
                     articleData.push({
