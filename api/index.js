@@ -8,69 +8,52 @@ module.exports = async (req, res) => {
 
     const keyword = req.body.keyword;
     if (!keyword) {
-        return res.send('Please enter a keyword to search.');
+        return res.status(400).json({ error: 'Please enter a keyword to search.' });
     }
 
-    // URL encode the keyword to ensure proper query formation
     const encodedKeyword = encodeURIComponent(keyword);
-
-    // Google Scholar search URL based on user input
     let targetUrl = `https://scholar.google.com/scholar?hl=en&as_sdt=0%2C5&q=${encodedKeyword}&btnG=`;
 
-    // Initialize variables for crawling
     let urlsToVisit = [targetUrl];
-    const maxCrawlLength = 20;  // Set the limit for the number of URLs to crawl
+    const maxCrawlLength = 5; // Reduce to 5 for Vercel's serverless time limits
     let crawledCount = 0;
     const articleData = [];
-    const visitedUrls = new Set(); // Set to track visited URLs
+    const visitedUrls = new Set();
 
-    // Variable to track if the crawl has finished
     let crawlFinished = false;
-
-    // Timeout after 30 seconds
     const timeout = setTimeout(() => {
         if (!crawlFinished) {
-            // If the crawl is not finished in 30 seconds, render the current results
             console.log('Timeout reached, sending partial results...');
             res.status(200).json({ articles: articleData, keyword: keyword });
         }
-    }, 30000); // 30 seconds timeout
+    }, 15000);  // Timeout reduced
 
     try {
-        // Crawl until the specified max crawl length is reached
         for (; urlsToVisit.length > 0 && crawledCount < maxCrawlLength;) {
             const currentUrl = urlsToVisit.shift();
 
-            // Skip already visited URLs
-            if (visitedUrls.has(currentUrl)) {
-                continue;  // Skip the iteration and move on to the next URL in the queue
-            }
-
-            // Mark the current URL as visited
+            if (visitedUrls.has(currentUrl)) continue;
             visitedUrls.add(currentUrl);
 
             crawledCount++;
 
             try {
-                // Request the target website with a timeout of 10 seconds
-                const response = await axios.get(currentUrl, { timeout: 10000 }); // 10 seconds timeout
-                console.log(`Response received from ${currentUrl}`);
+                const response = await axios.get(currentUrl, {
+                    timeout: 10000,
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                    }
+                });
 
-                // Check if the response data contains anything useful
                 if (!response.data) {
                     console.error('No data received');
+                    continue;
                 }
 
                 const $ = cheerio.load(response.data);
-
-                // Find all links on the page
-                const linkElements = $('a');
-                linkElements.each((index, element) => {
+                $('a').each((index, element) => {
                     let url = $(element).attr('href');
-
-                    // Follow valid links that do not lead to Google or download pages
-                    if (url && url.startsWith("https://") && !visitedUrls.has(url) && !url.includes("google") && !url.includes("download")) {
-                        // Add the valid URLs to the list of URLs to visit
+                    if (url && url.startsWith("https://") && !visitedUrls.has(url)) {
                         urlsToVisit.push(url);
                     }
                 });
@@ -103,16 +86,11 @@ module.exports = async (req, res) => {
             }
         }
 
-        // Set crawlFinished to true and clear the timeout once the crawl is complete
         crawlFinished = true;
         clearTimeout(timeout);
-
-        // After the crawl, render the results page with scraped data
         res.status(200).json({ articles: articleData, keyword: keyword });
-
     } catch (error) {
         console.error('Error during crawling:', error.message);
-        res.send('Error occurred while scraping. Please try again later.');
+        res.status(500).json({ error: 'Error occurred while scraping. Please try again later.' });
     }
-
 };
